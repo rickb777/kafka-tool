@@ -13,7 +13,7 @@ Usage of ./kafka-tool:
         consume from begin
   -cmd command
         - consumer (default): runs a consumer that prints each message
-        - copy
+        - copy: copy messages from host to remote
         - offset
         - resetOffset
   -filter string
@@ -23,7 +23,7 @@ Usage of ./kafka-tool:
   -host string
         brokerlist/topic
   -partition int
-        partition number (default, -1, is all partitions)
+        required partition number
   -print
         printflag
   -remote string

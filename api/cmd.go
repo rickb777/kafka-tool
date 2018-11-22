@@ -2,8 +2,8 @@ package api
 
 import (
 	"errors"
+	"fmt"
 	"github.com/Shopify/sarama"
-	"log"
 	"regexp"
 )
 
@@ -15,22 +15,22 @@ const (
 )
 
 var (
-	ERR_MISSING_HOST   = errors.New("brokerlist or topic is empty, pls set it with \"host\" parameter")
-	ERR_MISSING_REMOTE = errors.New("dstbrokerlist or dsttopic is empty, pls set it with \"remote\" parameter")
-	ERR_MISSING_GROUP  = errors.New("group is empty, pls set it with \"group\" parameter")
+	ERR_MISSING_HOST   = errors.New(`brokerlist or topic is empty, please set it with the "host" parameter`)
+	ERR_MISSING_REMOTE = errors.New(`dstbrokerlist or dsttopic is empty, please set it with the "remote" parameter`)
+	ERR_MISSING_GROUP  = errors.New(`group is empty, please set it with the "group" parameter`)
 )
 
 type KafkaTool struct {
-	Command    string
-	IfPrint    bool
-	Begin      bool
-	Brokers    []string
-	DstBrokers []string
-	Group      string
-	Topic      string
-	DstTopic   string
-	Partition  int
-	KeyFilter  string
+	Command       string
+	PrintMessages bool
+	Begin         bool
+	Brokers       []string
+	DstBrokers    []string
+	Group         string
+	Topic         string
+	DstTopic      string
+	Partition     int
+	KeyFilter     string
 
 	keyFilterReg *regexp.Regexp
 	consumer     sarama.Consumer
@@ -61,8 +61,7 @@ func (k *KafkaTool) Start() (err error) {
 	case CMD_RESETOFFSET:
 		err = k.SetOffsetToNewest()
 	case CMD_OFFSET:
-		// err = k.GetNewestOffset()
-		err = k.GetGroupOffset()
+		err = k.GetOffset()
 	default:
 		err = errors.New("unknown command: " + k.Command)
 	}
@@ -104,7 +103,7 @@ func (k *KafkaTool) StartTopicCopy() (err error) {
 	defer k.producer.Close()
 
 	//start
-	err = StartTopicCopy(k.consumer, k.producer, k.Topic, k.DstTopic, k.IfPrint, k.keyFilterReg, k.Begin)
+	err = StartTopicCopy(k.consumer, k.producer, k.Topic, k.DstTopic, k.PrintMessages, k.keyFilterReg, k.Begin)
 	if err != nil {
 		return
 	}
@@ -116,6 +115,7 @@ func (k *KafkaTool) SetOffsetToNewest() error {
 	if len(k.Brokers) == 0 || k.Topic == "" {
 		return ERR_MISSING_HOST
 	}
+
 	if k.Group == "" {
 		return ERR_MISSING_GROUP
 	}
@@ -123,7 +123,7 @@ func (k *KafkaTool) SetOffsetToNewest() error {
 	return SetOffsetToNewest(k.Brokers, k.Group, k.Topic)
 }
 
-func (k *KafkaTool) GetNewestOffset() error {
+func (k *KafkaTool) getNewestOffset() error {
 	if len(k.Brokers) == 0 || k.Topic == "" {
 		return ERR_MISSING_HOST
 	}
@@ -133,20 +133,21 @@ func (k *KafkaTool) GetNewestOffset() error {
 		return err
 	}
 
+	fmt.Printf("TOPIC                PARTITION OFFSET\n")
 	for pid, offset := range offsets {
-		log.Printf("%s\t%d\t%d\n", k.Topic, pid, offset)
+		fmt.Printf("%-20s %-9d %d\n", k.Topic, pid, offset)
 	}
 
 	return nil
 }
 
-func (k *KafkaTool) GetGroupOffset() error {
-	if len(k.Brokers) == 0 {
-		return ERR_MISSING_HOST
+func (k *KafkaTool) getGroupOffset() error {
+	if k.Group == "" {
+		return k.getNewestOffset()
 	}
 
-	if k.Group == "" {
-		return ERR_MISSING_GROUP
+	if len(k.Brokers) == 0 {
+		return ERR_MISSING_HOST
 	}
 
 	offsets, err := GetGroupOffset(k.Brokers, k.Group)
@@ -154,26 +155,33 @@ func (k *KafkaTool) GetGroupOffset() error {
 		return err
 	}
 
-	log.Printf("GROUP\tTOPIC\tPARTITION\tCURRENT-OFFSET\tLOG-END-OFFSET\tLAG\tOWNER")
+	fmt.Printf("GROUP        TOPIC                PARTITION CURRENT-OFFSET LOG-END-OFFSET LAG   OWNER\n")
 	for topic, partitions := range offsets {
-		newest_offsets, err := GetNewestOffset(k.Brokers, topic)
+		newestOffsets, err := GetNewestOffset(k.Brokers, topic)
 		if err != nil {
 			return err
 		}
 
-		for id, newest_offset := range newest_offsets {
+		for id, newestOffset := range newestOffsets {
 			pid := int32(id)
-			current_offset := partitions[pid].Offset
-			lag := newest_offset - current_offset
+			currentOffset := partitions[pid].Offset
+			lag := newestOffset - currentOffset
 
 			owner := partitions[pid].Metadata
 			if owner == "" {
-				owner = "NULL"
+				owner = "-"
 			}
 
-			log.Printf("%s\t%s\t%d\t%d\t%d\t%d\t%s", k.Group, topic, pid, current_offset, newest_offset, lag, owner)
+			fmt.Printf("%-12s %-20s %-9d %-14d %-14d %-5d %s\n", k.Group, topic, pid, currentOffset, newestOffset, lag, owner)
 		}
 	}
 
 	return nil
+}
+
+func (k *KafkaTool) GetOffset() error {
+	if k.Group == "" {
+		return k.getNewestOffset()
+	}
+	return k.getGroupOffset()
 }

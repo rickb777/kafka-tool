@@ -10,19 +10,19 @@ import (
 
 var (
 	command, host, remote, filter, group *string
-	ifPrint, begin                       *bool
+	print, begin                         *bool
 	partition                            *int
 )
 
 func init() {
-	command = flag.String("cmd", "consumer", "command: one of consumer, copy, offset, resetOffset [default: consumer]")
+	command = flag.String("cmd", "consumer", `command: one of consumer, copy, offset, resetOffset`)
 	host = flag.String("host", "", "brokerlist/topic (brokerlist can be comma-separated)")
-	remote = flag.String("remote", "", "brokerlist/topic, this is the target when using \"copy\"")
-	filter = flag.String("filter", "", "the filter on keys (optional)")
+	remote = flag.String("remote", "", `brokerlist/topic, this is the target when using "copy"`)
+	filter = flag.String("filter", "", "show only messages with keys that match this regex (optional)")
 	group = flag.String("group", "", "the consumer group (optional)")
-	ifPrint = flag.Bool("print", false, "printflag")
-	begin = flag.Bool("begin", false, "consume from begin")
-	partition = flag.Int("partition", -1, "partitionnum")
+	print = flag.Bool("print", false, `enable verbose output (during "copy")`)
+	begin = flag.Bool("begin", false, `consume from the beginning`)
+	partition = flag.Int("partition", -1, `required partition number`)
 }
 
 func main() {
@@ -30,12 +30,12 @@ func main() {
 	flag.Parse()
 
 	kafkaTool := &api.KafkaTool{
-		Command:   *command,
-		IfPrint:   *ifPrint,
-		Begin:     *begin,
-		Group:     *group,
-		Partition: *partition,
-		KeyFilter: *filter,
+		Command:       *command,
+		PrintMessages: *print,
+		Begin:         *begin,
+		Group:         *group,
+		Partition:     *partition,
+		KeyFilter:     *filter,
 	}
 
 	//host

@@ -63,14 +63,14 @@ func SetOffsetToNewest(brokers []string, group, topic string) error {
 	defer kafka_client.Close()
 
 	//init cluster consumer with group
-	cconsumer, err := cluster.NewConsumerFromClient(kafka_client, group, []string{topic})
+	clusterConsumer, err := cluster.NewConsumerFromClient(kafka_client, group, []string{topic})
 	if err != nil {
 		return err
 	}
-	defer cconsumer.Close()
+	defer clusterConsumer.Close()
 	go func() {
-		for note := range cconsumer.Notifications() {
-			log.Printf("kafka rebalanced:%v\n", note)
+		for note := range clusterConsumer.Notifications() {
+			log.Printf("kafka rebalanced: %v\n", note)
 		}
 	}()
 
@@ -89,19 +89,19 @@ func SetOffsetToNewest(brokers []string, group, topic string) error {
 	//read every partition newest offset and set it
 	for _, pid := range ps {
 		log.Printf("Read message from partition %d ...\n", pid)
-		pconsumer, err := consumer.ConsumePartition(topic, pid, sarama.OffsetNewest)
+		partitionConsumer, err := consumer.ConsumePartition(topic, pid, sarama.OffsetNewest)
 		if err != nil {
-			log.Fatalf("Read message from partition %d err: %v", pid, err)
+			log.Fatalf("Read message from partition %d err: %v\n", pid, err)
 			continue
 		}
 
-		msg := <-pconsumer.Messages()
+		msg := <-partitionConsumer.Messages()
 		log.Printf("Reset %d partition offset %d\n", pid, msg.Offset)
-		cconsumer.MarkOffset(msg, "kafka-tool-reset-offset")
+		clusterConsumer.MarkOffset(msg, "kafka-tool-reset-offset")
 	}
 
-	for err := range cconsumer.Errors() {
-		log.Printf("kafka consume error:%v\n", err)
+	for err := range clusterConsumer.Errors() {
+		log.Printf("kafka cluster consumer error: %v\n", err)
 	}
 
 	return nil
@@ -120,7 +120,7 @@ func GetGroupOffset(brokers []string, group string) (map[string]map[int32]*saram
 
 		err := broker.Open(nil)
 		if err != nil {
-			log.Printf("ERR connect %s failed: %v", broker.Addr(), err)
+			log.Printf("ERR connect %s failed: %v\n", broker.Addr(), err)
 			continue
 		}
 

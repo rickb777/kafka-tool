@@ -15,7 +15,7 @@ func InitKafkaConsumer(brokers []string) (consumer sarama.Consumer, err error) {
 	return sarama.NewConsumer(brokers, nil)
 }
 
-func StartConsumer(consumer sarama.Consumer, srcTopic string, wantedPartition int, ifPrint bool, keyFilterReg *regexp.Regexp, begin bool) error {
+func StartConsumer(consumer sarama.Consumer, srcTopic string, wantedPartition int, printMessages bool, keyFilterReg *regexp.Regexp, begin bool) error {
 	//partitions
 	partitions, err := consumer.Partitions(srcTopic)
 	if err != nil {
@@ -39,13 +39,13 @@ func StartConsumer(consumer sarama.Consumer, srcTopic string, wantedPartition in
 		if wantedPartition < 0 || pid == int32(wantedPartition) {
 			wg.Add(1)
 
-			pconsumer, err := consumer.ConsumePartition(srcTopic, pid, offsettype)
+			partitionConsumer, err := consumer.ConsumePartition(srcTopic, pid, offsettype)
 			if err != nil {
 				log.Fatalf("Consume %s partition %d err: %v\n", srcTopic, pid, err)
 				return nil
 			}
 
-			go consumePartition(wg, exitchan, pid, srcTopic, ifPrint, keyFilterReg, pconsumer)
+			go consumePartition(wg, exitchan, pid, srcTopic, printMessages, keyFilterReg, partitionConsumer)
 		}
 	}
 
@@ -53,7 +53,7 @@ func StartConsumer(consumer sarama.Consumer, srcTopic string, wantedPartition in
 	return nil
 }
 
-func consumePartition(wg *sync.WaitGroup, exitchan <-chan bool, pid int32, topic string, ifPrint bool, keyFilterReg *regexp.Regexp, pconsumer sarama.PartitionConsumer) {
+func consumePartition(wg *sync.WaitGroup, exitchan <-chan bool, pid int32, topic string, printMessages bool, keyFilterReg *regexp.Regexp, partitionConsumer sarama.PartitionConsumer) {
 	defer wg.Done()
 
 	var consumed int64
@@ -62,9 +62,9 @@ func consumePartition(wg *sync.WaitGroup, exitchan <-chan bool, pid int32, topic
 
 	for running {
 		select {
-		case msg := <-pconsumer.Messages():
+		case msg := <-partitionConsumer.Messages():
 			if keyFilterReg == nil || keyFilterReg.MatchString(string(msg.Key)) {
-				if ifPrint {
+				if printMessages {
 					key := decodeJsonKey(msg.Key)
 					body := string(msg.Value)
 					fmt.Printf("[%d %5d] %s %s %v\n", pid, msg.Offset, body, timeStr(msg.Timestamp), key)
