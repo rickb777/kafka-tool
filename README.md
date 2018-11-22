@@ -3,27 +3,27 @@
 ## Installation
 ### Install from source
 ```bash
-go get github.com/xuebing1110/kafka-tool
+go get github.com/rickb777/kafka-tool
 ```
-
-### Install from binary
-[download](http://download.bingbaba.com/kafka-tool/)
 
 ## Usage
 ```bash
 Usage of ./kafka-tool:
   -begin
         consume from begin
-  -cmd string
-        command, eg: consumer/copy/offset (default "consumer")
+  -cmd command
+        - consumer (default): runs a consumer that prints each message
+        - copy
+        - offset
+        - resetOffset
   -filter string
-        the filter when copy string
+        the filter on keys (optional)
   -group string
-        the consumer group
+        the consumer group (optional)
   -host string
         brokerlist/topic
   -partition int
-        partitionnum (default -1)
+        partition number (default, -1, is all partitions)
   -print
         printflag
   -remote string

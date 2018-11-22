@@ -2,7 +2,7 @@ package api
 
 import (
 	"errors"
-	sarama "github.com/Shopify/sarama"
+	"github.com/Shopify/sarama"
 	"log"
 	"regexp"
 )
@@ -30,16 +30,16 @@ type KafkaTool struct {
 	Topic      string
 	DstTopic   string
 	Partition  int
-	Filter     string
+	KeyFilter  string
 
-	filterReg *regexp.Regexp
-	consumer  sarama.Consumer
-	producer  sarama.AsyncProducer
+	keyFilterReg *regexp.Regexp
+	consumer     sarama.Consumer
+	producer     sarama.AsyncProducer
 }
 
 func (k *KafkaTool) Init() (err error) {
-	if k.Filter != "" {
-		k.filterReg, err = regexp.Compile(k.Filter)
+	if k.KeyFilter != "" {
+		k.keyFilterReg, err = regexp.Compile(k.KeyFilter)
 		if err != nil {
 			return
 		}
@@ -82,7 +82,7 @@ func (k *KafkaTool) StartKafkaConsumer() (err error) {
 	}
 	defer k.consumer.Close()
 
-	return StartConsumer(k.consumer, k.Topic, k.Partition, k.filterReg, k.Begin)
+	return StartConsumer(k.consumer, k.Topic, k.Partition, true, k.keyFilterReg, k.Begin)
 }
 
 func (k *KafkaTool) StartTopicCopy() (err error) {
@@ -104,7 +104,7 @@ func (k *KafkaTool) StartTopicCopy() (err error) {
 	defer k.producer.Close()
 
 	//start
-	err = StartTopicCopy(k.consumer, k.producer, k.Topic, k.DstTopic, k.IfPrint, k.filterReg, k.Begin)
+	err = StartTopicCopy(k.consumer, k.producer, k.Topic, k.DstTopic, k.IfPrint, k.keyFilterReg, k.Begin)
 	if err != nil {
 		return
 	}

@@ -1,27 +1,29 @@
 package api
 
 import (
+	"bytes"
+	"encoding/json"
 	"fmt"
-	sarama "github.com/Shopify/sarama"
+	"github.com/Shopify/sarama"
 	"log"
 	"regexp"
 	"sync"
+	"time"
 )
 
 func InitKafkaConsumer(brokers []string) (consumer sarama.Consumer, err error) {
 	return sarama.NewConsumer(brokers, nil)
 }
 
-func StartConsumer(consumer sarama.Consumer, topic string, partition int, filterReg *regexp.Regexp, begin bool) error {
+func StartConsumer(consumer sarama.Consumer, srcTopic string, wantedPartition int, ifPrint bool, keyFilterReg *regexp.Regexp, begin bool) error {
 	//partitions
-	ps, err := consumer.Partitions(topic)
+	partitions, err := consumer.Partitions(srcTopic)
 	if err != nil {
 		return err
 	}
 
-	//exit
-	var wg sync.WaitGroup
-	exitchan := getSignalChan(len(ps))
+	//exit signal
+	exitchan := getSignalChan(len(partitions))
 
 	//offset
 	var offsettype int64
@@ -31,43 +33,67 @@ func StartConsumer(consumer sarama.Consumer, topic string, partition int, filter
 		offsettype = sarama.OffsetNewest
 	}
 
-	for _, pid := range ps {
-		//非指定partition
-		if partition >= 0 && pid != int32(partition) {
-			continue
-		}
+	wg := &sync.WaitGroup{}
 
-		wg.Add(1)
-		go func(pid int32) {
-			defer wg.Done()
+	for _, pid := range partitions {
+		if wantedPartition < 0 || pid == int32(wantedPartition) {
+			wg.Add(1)
 
-			pconsumer, err := consumer.ConsumePartition(topic, pid, offsettype)
+			pconsumer, err := consumer.ConsumePartition(srcTopic, pid, offsettype)
 			if err != nil {
-				log.Fatalf("consume %s partition %d err: %v\n", topic, pid, err)
-				return
+				log.Fatalf("Consume %s partition %d err: %v\n", srcTopic, pid, err)
+				return nil
 			}
 
-			var consumed int64
-			var offset int64
-		ConsumerLoop:
-			for {
-				select {
-				case msg := <-pconsumer.Messages():
-					body := string(msg.Value)
-					if filterReg == nil || filterReg.MatchString(body) {
-						offset = msg.Offset
-						fmt.Printf("[%d] %s\n", pid, body)
-						consumed++
-					}
-				case <-exitchan:
-					break ConsumerLoop
-				}
-			}
-
-			log.Printf("Consumed %d message over from %d partition ,offset is %d\n", consumed, pid, offset)
-		}(pid)
+			go consumePartition(wg, exitchan, pid, srcTopic, ifPrint, keyFilterReg, pconsumer)
+		}
 	}
 
 	wg.Wait()
 	return nil
+}
+
+func consumePartition(wg *sync.WaitGroup, exitchan <-chan bool, pid int32, topic string, ifPrint bool, keyFilterReg *regexp.Regexp, pconsumer sarama.PartitionConsumer) {
+	defer wg.Done()
+
+	var consumed int64
+	var offset int64
+	running := true
+
+	for running {
+		select {
+		case msg := <-pconsumer.Messages():
+			if keyFilterReg == nil || keyFilterReg.MatchString(string(msg.Key)) {
+				if ifPrint {
+					key := decodeJsonKey(msg.Key)
+					body := string(msg.Value)
+					fmt.Printf("[%d %5d] %s %s %v\n", pid, msg.Offset, body, timeStr(msg.Timestamp), key)
+				}
+			}
+
+			offset = msg.Offset
+			consumed++
+		case <-exitchan:
+			running = false
+		}
+	}
+
+	log.Printf("Consumed %d %s messages from partition %d. The offset is now %d.\n", consumed, topic, pid, offset)
+}
+
+func timeStr(t time.Time) string {
+	if t.IsZero() {
+		return ""
+	}
+	return t.Format("2006-01-02T15:04:05")
+}
+
+func decodeJsonKey(kb []byte) string {
+	key := make(map[string]interface{})
+	err := json.NewDecoder(bytes.NewBuffer(kb)).Decode(&key)
+	if err != nil {
+		return string(kb)
+	}
+	// use Sprintf to get a terse form, and then remove leading "map"
+	return fmt.Sprintf("%v", key)[3:]
 }

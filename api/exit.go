@@ -5,7 +5,7 @@ import (
 	"os/signal"
 )
 
-func getSignalChan(l int) chan bool {
+func getSignalChan(l int) <-chan bool {
 	// Trap SIGINT to trigger a shutdown.
 	exitchan := make(chan bool, l)
 	signals := make(chan os.Signal, 1)

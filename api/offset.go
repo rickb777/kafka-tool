@@ -4,7 +4,7 @@ import (
 	"log"
 	// "math"
 
-	sarama "github.com/Shopify/sarama"
+	"github.com/Shopify/sarama"
 	cluster "github.com/bsm/sarama-cluster"
 )
 

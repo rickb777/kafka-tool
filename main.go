@@ -2,7 +2,7 @@ package main
 
 import (
 	"flag"
-	kafkatool "github.com/xuebing1110/kafka-tool/api"
+	"github.com/rickb777/kafka-tool/api"
 	"log"
 	"os"
 	"strings"
@@ -15,11 +15,11 @@ var (
 )
 
 func init() {
-	command = flag.String("cmd", "consumer", "command, eg: consumer/copy/offset")
-	host = flag.String("host", "", "brokerlist/topic")
-	remote = flag.String("remote", "", "brokerlist/topic, on using command \"copy\"")
-	filter = flag.String("filter", "", "the filter on copy string")
-	group = flag.String("group", "", "the consumer group")
+	command = flag.String("cmd", "consumer", "command: one of consumer, copy, offset, resetOffset [default: consumer]")
+	host = flag.String("host", "", "brokerlist/topic (brokerlist can be comma-separated)")
+	remote = flag.String("remote", "", "brokerlist/topic, this is the target when using \"copy\"")
+	filter = flag.String("filter", "", "the filter on keys (optional)")
+	group = flag.String("group", "", "the consumer group (optional)")
 	ifPrint = flag.Bool("print", false, "printflag")
 	begin = flag.Bool("begin", false, "consume from begin")
 	partition = flag.Int("partition", -1, "partitionnum")
@@ -29,13 +29,13 @@ func main() {
 	log.SetOutput(os.Stderr)
 	flag.Parse()
 
-	kafkaTool := &kafkatool.KafkaTool{
+	kafkaTool := &api.KafkaTool{
 		Command:   *command,
 		IfPrint:   *ifPrint,
 		Begin:     *begin,
 		Group:     *group,
 		Partition: *partition,
-		Filter:    *filter,
+		KeyFilter: *filter,
 	}
 
 	//host
@@ -44,6 +44,7 @@ func main() {
 		flag.Usage()
 		os.Exit(1)
 	}
+
 	kafkaTool.Brokers = strings.Split(brokers_topic[0], ",")
 	if len(brokers_topic) == 2 {
 		kafkaTool.Topic = brokers_topic[1]
